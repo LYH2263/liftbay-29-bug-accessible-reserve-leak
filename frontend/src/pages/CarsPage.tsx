@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api/client";
-type Car = { id: number; label: string; floor: number; direction: string; load: number; capacity: number; accessible: boolean };
+type Car = { id: number; label: string; floor: number; direction: string; load: number; capacity: number; accessible: boolean; reserved: number };
 type Call = { id: number; floor: number; status: string };
 type B = { floors: number };
 export default function CarsPage() {
@@ -27,9 +27,19 @@ export default function CarsPage() {
     <h2>轿厢井道</h2>
     {err && <div className="err">{err}</div>}
     <div className="shaft-wrap">
-      {cars.map(car => (
+      {cars.map(car => {
+        // 剩余/预留与 /dispatch 同一后端来源：普通呼梯只能占用剩余扣除预留后的席位
+        const remaining = car.capacity - car.load;
+        const reserved = car.accessible ? car.reserved : 0;
+        const openSeats = remaining - reserved;
+        return (
         <div className="shaft" key={car.id}>
           <h3>{car.accessible && "♿ "}{car.label} · {car.load}/{car.capacity}</h3>
+          <div className="car-seats">
+            <span>剩余 {remaining}</span>
+            {car.accessible && <span className="tag">♿ 预留 {reserved}</span>}
+            <span>普通可派 {Math.max(0, openSeats)}</span>
+          </div>
           {levels.map(f => (
             <div key={f} className={`floor-slot ${car.floor === f ? "has-car" : ""} ${callFloors.has(f) ? "has-call" : ""}`}>
               {car.floor === f ? car.direction : f}
@@ -39,7 +49,8 @@ export default function CarsPage() {
             {car.accessible ? "取消无障碍" : "标记无障碍"}
           </button>
         </div>
-      ))}
+        );
+      })}
     </div>
   </>);
 }

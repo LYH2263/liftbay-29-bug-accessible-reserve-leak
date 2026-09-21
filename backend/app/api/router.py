@@ -38,7 +38,15 @@ def buildings(db: Session = Depends(get_db)):
 
 @api_router.get("/cars", response_model=list[CarOut])
 def cars(db: Session = Depends(get_db)):
-    return db.scalars(select(ElevatorCar).order_by(ElevatorCar.id)).all()
+    rows = db.scalars(select(ElevatorCar).order_by(ElevatorCar.id)).all()
+    reserved_by_building = _reserved_by_building(db)
+    out: list[CarOut] = []
+    for c in rows:
+        data = CarOut.model_validate(c)
+        if c.accessible:
+            data.reserved = reserved_by_building.get(c.building_id, 0)
+        out.append(data)
+    return out
 
 
 @api_router.patch("/cars/{car_id}", response_model=CarOut)
@@ -79,15 +87,24 @@ def create_call(body: CallCreate, db: Session = Depends(get_db)):
     return ticket
 
 
-def _reserved_accessible_seats(db: Session, building_id: int) -> int:
-    """Seats to hold on each accessible car for already-waiting accessible calls."""
-    return db.scalar(
-        select(func.coalesce(func.sum(CallTicket.passengers), 0)).where(
-            CallTicket.building_id == building_id,
+def _reserved_by_building(db: Session) -> dict[int, int]:
+    """Waiting accessible passengers per building — the single source of reservation.
+
+    Used both by /dispatch (seats held on accessible cars) and /cars (what the
+    car page shows as reserved), so the two views can never diverge.
+    """
+    rows = db.execute(
+        select(
+            CallTicket.building_id,
+            func.coalesce(func.sum(CallTicket.passengers), 0),
+        )
+        .where(
             CallTicket.status == "waiting",
             CallTicket.needs_accessible.is_(True),
         )
-    ) or 0
+        .group_by(CallTicket.building_id)
+    ).all()
+    return {building_id: int(total) for building_id, total in rows}
 
 
 @api_router.post("/dispatch", response_model=DispatchResult)
@@ -100,7 +117,8 @@ def dispatch(body: DispatchRequest, db: Session = Depends(get_db)):
     car_rows = db.scalars(
         select(ElevatorCar).where(ElevatorCar.building_id == ticket.building_id)
     ).all()
-    reserved = _reserved_accessible_seats(db, ticket.building_id)
+    reserved_by_building = _reserved_by_building(db)
+    reserved = reserved_by_building.get(ticket.building_id, 0)
     cars = [
         CarState(
             c.id,

@@ -24,6 +24,8 @@ export default function CallsPage() {
       reload();
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
   }
+  // 与拥堵页同口径：只数 waiting 呼梯的人数（已派/已拒不计入）
+  const waitingPax = rows.filter(c => c.status === "waiting").reduce((s, c) => s + c.passengers, 0);
   return (<>
     <h2>呼梯</h2>
     <div className="toolbar">
@@ -38,6 +40,7 @@ export default function CallsPage() {
       <button onClick={create}>登记呼梯</button>
     </div>
     {err && <div className="err">{err}</div>}
+    <div className="ok">等待中合计 {waitingPax} 人（与拥堵页同口径）</div>
     <table className="table"><thead><tr><th>ID</th><th>楼层</th><th>方向</th><th>人数</th><th>无障碍</th><th>状态</th><th>轿厢</th><th>评分</th></tr></thead>
     <tbody>{rows.map(c => <tr key={c.id}><td>{c.id}</td><td className="mono">{c.floor}</td><td>{c.direction}</td><td>{c.passengers}</td><td>{c.needs_accessible ? <span className="tag">♿ 无障碍</span> : "—"}</td><td>{c.status}</td><td>{c.assigned_car_id ?? "—"}</td><td className="mono">{c.score || "—"}</td></tr>)}</tbody></table>
   </>);
