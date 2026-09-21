@@ -11,7 +11,7 @@ const floorNav = [
   { to: "/congestion", label: "堵", full: "拥堵", floorHint: "G" },
 ];
 
-type Car = { id: number; label: string; floor: number; direction: string; load: number; capacity: number; accessible?: boolean };
+type Car = { id: number; label: string; floor: number; direction: string; load: number; capacity: number; accessible?: boolean; reserved?: number; remaining?: number };
 type Call = { id: number; floor: number; status: string };
 type B = { floors: number; name?: string };
 
@@ -85,6 +85,18 @@ export default function Layout() {
                 <span className="mono">
                   {car.load}/{car.capacity}
                 </span>
+                {(car.remaining !== undefined || car.reserved !== undefined) && (
+                  <span
+                    className="mono elev-shaft-seats"
+                    title={
+                      car.accessible
+                        ? `剩 ${car.remaining ?? 0}；为候梯无障碍呼梯预留 ${car.reserved ?? 0}；普通呼梯最多再上 ${Math.max(0, (car.remaining ?? 0) - (car.reserved ?? 0))}`
+                        : "普通轿厢不接无障碍呼梯"
+                    }
+                  >
+                    剩 {car.remaining ?? 0}{car.accessible ? ` · 预留 ${car.reserved ?? 0}` : ""}
+                  </span>
+                )}
               </div>
               <div className="elev-shaft-well">
                 {levels.map((f) => {

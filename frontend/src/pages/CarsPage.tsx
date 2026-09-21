@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api/client";
-type Car = { id: number; label: string; floor: number; direction: string; load: number; capacity: number; accessible: boolean };
+type Car = { id: number; label: string; floor: number; direction: string; load: number; capacity: number; accessible: boolean; reserved: number; remaining: number };
 type Call = { id: number; floor: number; status: string };
 type B = { floors: number };
 export default function CarsPage() {
@@ -30,6 +30,19 @@ export default function CarsPage() {
       {cars.map(car => (
         <div className="shaft" key={car.id}>
           <h3>{car.accessible && "♿ "}{car.label} · {car.load}/{car.capacity}</h3>
+          <div
+            className="car-seats mono"
+            title={
+              car.accessible
+                ? `为候梯无障碍呼梯预留 ${car.reserved} 席；普通呼梯最多再上 ${Math.max(0, car.remaining - car.reserved)} 席`
+                : "普通轿厢不接无障碍呼梯"
+            }
+          >
+            剩 {car.remaining}
+            {car.accessible && (
+              <span className="car-seats-reserve"> · 预留 {car.reserved} · 普通可派 {Math.max(0, car.remaining - car.reserved)}</span>
+            )}
+          </div>
           {levels.map(f => (
             <div key={f} className={`floor-slot ${car.floor === f ? "has-car" : ""} ${callFloors.has(f) ? "has-call" : ""}`}>
               {car.floor === f ? car.direction : f}

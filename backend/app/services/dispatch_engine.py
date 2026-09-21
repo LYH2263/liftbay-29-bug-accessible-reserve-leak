@@ -49,8 +49,19 @@ REASON_RESERVED = "为无障碍呼梯预留容量"
 
 
 def score_car(car: CarState, call: CallRequest) -> ScoreResult:
+    # 硬资格：无障碍呼梯只能上无障碍车
+    if call.needs_accessible and not car.accessible:
+        return ScoreResult(car.car_id, -1e9, False, REASON_NOT_ACCESSIBLE)
+
+    # 物理容量：谁都不能超过轿厢定员
     if car.load + call.passengers > car.capacity:
         return ScoreResult(car.car_id, -1e9, False, REASON_FULL)
+
+    # 普通呼梯可以搭无障碍车，但登厢后必须仍留得下为候梯无障碍单预留的座位
+    # （无障碍呼梯本身不受预留约束——预留就是留给它们的）
+    if not call.needs_accessible and car.accessible and car.reserved > 0:
+        if car.load + call.passengers > car.capacity - car.reserved:
+            return ScoreResult(car.car_id, -1e9, False, REASON_RESERVED)
 
     distance = abs(car.floor - call.floor)
     score = 100.0 - distance * DISTANCE_WEIGHT

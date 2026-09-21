@@ -24,8 +24,16 @@ export default function CallsPage() {
       reload();
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
   }
+  const waitingRows = rows.filter(c => c.status === "waiting");
+  const waitingPax = waitingRows.reduce((n, c) => n + c.passengers, 0);
   return (<>
-    <h2>呼梯</h2>
+    <h2>
+      呼梯
+      <span className="list-total mono">
+        待派 {waitingRows.length} 单 / {waitingPax} 人
+        <span className="list-total-hint">（与拥堵页候梯合计同源）</span>
+      </span>
+    </h2>
     <div className="toolbar">
       <select value={bid} onChange={e => setBid(Number(e.target.value))}>{buildings.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select>
       <input type="number" value={floor} onChange={e => setFloor(Number(e.target.value))} style={{ width: 72 }} />

@@ -267,3 +267,19 @@ button {
 .car-acc-toggle { margin-top: 4px; padding: .3rem .2rem; font-size: .68rem; font-weight: 400; background: var(--panel); color: var(--text); border: 1px solid var(--line); }
 .car-acc-toggle:hover { border-color: var(--shaft-teal); color: var(--shaft-teal); }
 .congestion-bar { height: 14px; background: var(--call); border-radius: 4px; }
+
+/* —— 同源账目：轿厢剩余/预留、列表合计 —— */
+.car-seats {
+  font-size: .62rem; color: var(--shaft-muted); text-align: center;
+  margin-top: 4px; line-height: 1.5; word-break: break-all;
+}
+.car-seats-reserve { color: var(--shaft-amber); }
+.elev-shaft-seats {
+  display: block; font-size: .62rem; color: var(--shaft-muted); margin-top: 2px;
+}
+.list-total {
+  font-size: .82rem; font-weight: 400; color: var(--shaft-teal);
+  margin-left: .75rem;
+}
+.list-total-hint { color: var(--shaft-muted); font-size: .72rem; margin-left: .4rem; }
+.list-total-row td { border-top: 1px solid var(--line); color: var(--shaft-teal); font-weight: 600; }

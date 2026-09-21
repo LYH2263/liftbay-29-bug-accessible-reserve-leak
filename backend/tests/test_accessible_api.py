@@ -34,6 +34,11 @@ def test_seed_scenario_normal_call_cannot_steal_reserved_accessible_car():
         # 种子：A3 剩余容量刚好够这笔无障碍 waiting
         assert acc["passengers"] == cars["A3"]["capacity"] - cars["A3"]["load"]
 
+        # 轿厢页与派工判定同源：A3 剩余 3、预留 3，普通车无预留
+        assert cars["A3"]["remaining"] == 3
+        assert cars["A3"]["reserved"] == 3
+        assert all(c["reserved"] == 0 for l, c in cars.items() if l != "A3")
+
         # 普通呼梯距 A3 更近，但不得抢光预留 → 改派 A1
         r = client.post("/api/dispatch", json={"call_id": normal["id"]})
         assert r.status_code == 200
@@ -41,12 +46,23 @@ def test_seed_scenario_normal_call_cannot_steal_reserved_accessible_car():
         assert got["assigned_car_id"] == cars["A1"]["id"]
         assert "预留" in got["detail"]
 
+        # 普通单派走后，A3 的预留与剩余都原封不动
+        cars_after = {c["label"]: c for c in client.get("/api/cars").json()}
+        assert cars_after["A3"]["reserved"] == 3
+        assert cars_after["A3"]["remaining"] == 3
+
         # 无障碍单随后成功派上无障碍车
         r = client.post("/api/dispatch", json={"call_id": acc["id"]})
         assert r.status_code == 200
         got = r.json()
         assert got["status"] == "assigned"
         assert got["assigned_car_id"] == cars["A3"]["id"]
+
+        # 无障碍单上车后预留清零、剩余归零
+        cars_final = {c["label"]: c for c in client.get("/api/cars").json()}
+        assert cars_final["A3"]["reserved"] == 0
+        assert cars_final["A3"]["remaining"] == 0
+        assert cars_final["A3"]["load"] == cars["A3"]["capacity"]
 
         # 回放可见因预留改派与无障碍派工
         logs = client.get("/api/replay").json()

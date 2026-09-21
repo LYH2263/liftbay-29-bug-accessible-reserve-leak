@@ -18,6 +18,8 @@ class CarOut(BaseModel):
     load: int
     capacity: int
     accessible: bool
+    reserved: int = 0  # 为该楼栋候梯无障碍呼梯预留的座位（仅无障碍车非 0）
+    remaining: int = 0  # 物理剩余定员
     model_config = {"from_attributes": True}
 
 

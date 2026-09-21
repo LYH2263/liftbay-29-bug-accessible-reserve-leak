@@ -16,6 +16,7 @@ from app.schemas.schemas import (
     LogOut,
 )
 from app.services.dispatch_engine import (
+    REASON_NOT_ACCESSIBLE,
     REASON_RESERVED,
     CallRequest,
     CarState,
@@ -31,6 +32,41 @@ def health():
     return {"status": "ok"}
 
 
+def _reserved_seats_by_building(db: Session) -> dict[int, int]:
+    """每栋楼需为候梯（waiting）无障碍呼梯预留的座位数。
+
+    /cars 展示、/dispatch 判定都取自这里，保证轿厢页预留与派工判定同源。
+    """
+    rows = db.execute(
+        select(
+            CallTicket.building_id,
+            func.coalesce(func.sum(CallTicket.passengers), 0),
+        )
+        .where(
+            CallTicket.status == "waiting",
+            CallTicket.needs_accessible.is_(True),
+        )
+        .group_by(CallTicket.building_id)
+    ).all()
+    return {building_id: total for building_id, total in rows}
+
+
+def _car_out(car: ElevatorCar, reserved_total: int) -> CarOut:
+    reserved = reserved_total if car.accessible else 0
+    return CarOut(
+        id=car.id,
+        building_id=car.building_id,
+        label=car.label,
+        floor=car.floor,
+        direction=car.direction,
+        load=car.load,
+        capacity=car.capacity,
+        accessible=car.accessible,
+        reserved=reserved,
+        remaining=car.capacity - car.load,
+    )
+
+
 @api_router.get("/buildings", response_model=list[BuildingOut])
 def buildings(db: Session = Depends(get_db)):
     return db.scalars(select(Building).order_by(Building.id)).all()
@@ -38,7 +74,9 @@ def buildings(db: Session = Depends(get_db)):
 
 @api_router.get("/cars", response_model=list[CarOut])
 def cars(db: Session = Depends(get_db)):
-    return db.scalars(select(ElevatorCar).order_by(ElevatorCar.id)).all()
+    car_rows = db.scalars(select(ElevatorCar).order_by(ElevatorCar.id)).all()
+    reserved_map = _reserved_seats_by_building(db)
+    return [_car_out(c, reserved_map.get(c.building_id, 0)) for c in car_rows]
 
 
 @api_router.patch("/cars/{car_id}", response_model=CarOut)
@@ -49,7 +87,7 @@ def update_car(car_id: int, body: CarUpdate, db: Session = Depends(get_db)):
     car.accessible = body.accessible
     db.commit()
     db.refresh(car)
-    return car
+    return _car_out(car, _reserved_seats_by_building(db).get(car.building_id, 0))
 
 
 @api_router.get("/calls", response_model=list[CallOut])
@@ -79,17 +117,6 @@ def create_call(body: CallCreate, db: Session = Depends(get_db)):
     return ticket
 
 
-def _reserved_accessible_seats(db: Session, building_id: int) -> int:
-    """Seats to hold on each accessible car for already-waiting accessible calls."""
-    return db.scalar(
-        select(func.coalesce(func.sum(CallTicket.passengers), 0)).where(
-            CallTicket.building_id == building_id,
-            CallTicket.status == "waiting",
-            CallTicket.needs_accessible.is_(True),
-        )
-    ) or 0
-
-
 @api_router.post("/dispatch", response_model=DispatchResult)
 def dispatch(body: DispatchRequest, db: Session = Depends(get_db)):
     ticket = db.get(CallTicket, body.call_id)
@@ -100,7 +127,8 @@ def dispatch(body: DispatchRequest, db: Session = Depends(get_db)):
     car_rows = db.scalars(
         select(ElevatorCar).where(ElevatorCar.building_id == ticket.building_id)
     ).all()
-    reserved = _reserved_accessible_seats(db, ticket.building_id)
+    reserved_map = _reserved_seats_by_building(db)
+    reserved = reserved_map.get(ticket.building_id, 0)
     cars = [
         CarState(
             c.id,
@@ -133,7 +161,12 @@ def dispatch(body: DispatchRequest, db: Session = Depends(get_db)):
     car = db.get(ElevatorCar, best.car_id)
     assert car
     label_by_id = {c.id: c.label for c in car_rows}
-    blocked = [
+    blocked_non_acc = [
+        label_by_id[r.car_id]
+        for r in results
+        if not r.accepted and r.reason == REASON_NOT_ACCESSIBLE
+    ]
+    blocked_reserve = [
         label_by_id[r.car_id]
         for r in results
         if not r.accepted and r.reason == REASON_RESERVED
@@ -141,8 +174,10 @@ def dispatch(body: DispatchRequest, db: Session = Depends(get_db)):
     parts = [f"派予 {car.label}，评分 {best.score:.1f}"]
     if ticket.needs_accessible:
         parts.append("无障碍呼梯")
-    if blocked:
-        parts.append(f"{'、'.join(blocked)} 因无障碍容量预留跳过")
+    if blocked_non_acc:
+        parts.append(f"{'、'.join(blocked_non_acc)} 非无障碍轿厢跳过")
+    if blocked_reserve:
+        parts.append(f"{'、'.join(blocked_reserve)} 因无障碍容量预留跳过")
     detail = "；".join(parts)
     ticket.status = "assigned"
     ticket.assigned_car_id = car.id

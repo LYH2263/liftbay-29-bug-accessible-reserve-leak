@@ -1,4 +1,5 @@
 from app.services.dispatch_engine import (
+    REASON_FULL,
     REASON_NOT_ACCESSIBLE,
     REASON_RESERVED,
     CallRequest,
@@ -97,3 +98,31 @@ def test_accessible_call_may_use_its_own_reserved_seats():
     call = CallRequest(1, 2, "up", 3, needs_accessible=True)
     r = score_car(car, call)
     assert r.accepted is True
+
+
+def test_full_and_reserved_reasons_are_distinct():
+    # 普通单、轿厢已物理满载 → 满员，而不是预留
+    full = CarState(1, 1, "idle", load=8, capacity=8, accessible=True, reserved=0)
+    r_full = score_car(full, CallRequest(1, 1, "up", 1))
+    assert r_full.accepted is False
+    assert r_full.reason == REASON_FULL
+
+    # 还有物理空位，但会侵占预留 → 预留，而不是满员
+    reserve = CarState(2, 1, "idle", load=5, capacity=8, accessible=True, reserved=3)
+    r_reserve = score_car(reserve, CallRequest(2, 1, "up", 1))
+    assert r_reserve.accepted is False
+    assert r_reserve.reason == REASON_RESERVED
+
+    assert REASON_FULL != REASON_RESERVED != REASON_NOT_ACCESSIBLE
+
+
+def test_reject_when_all_cars_ineligible_reports_distinct_reasons():
+    # 无障碍呼梯：普通车资格不符，无障碍车满员——两种原因都应出现在结果中
+    cars = [
+        CarState(1, 1, "idle", load=0, capacity=10, accessible=False),
+        CarState(2, 2, "idle", load=8, capacity=8, accessible=True),
+    ]
+    call = CallRequest(9, 3, "up", 1, needs_accessible=True)
+    reasons = {r.reason for r in [score_car(c, call) for c in cars]}
+    assert reasons == {REASON_NOT_ACCESSIBLE, REASON_FULL}
+    assert pick_car(cars, call) is None
